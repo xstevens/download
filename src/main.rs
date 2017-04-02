@@ -41,7 +41,7 @@ fn main() {
                            .long("remote-name")
                            .help("output to a file using the same name as the remote"))
                   .arg(Arg::with_name("user-agent")
-                           .short("U")
+                           .short("A")
                            .long("user-agent")
                            .takes_value(true)
                            .help("use value as user-agent header"))
