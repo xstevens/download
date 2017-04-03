@@ -22,7 +22,7 @@ FLAGS:
 
 OPTIONS:
     -o, --output <OUTPUT>            output filename
-    -U, --user-agent <user-agent>    use value as user-agent header
+    -A, --user-agent <user-agent>    use value as user-agent header
 
 ARGS:
     <url>
