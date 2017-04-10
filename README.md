@@ -19,6 +19,7 @@ FLAGS:
     -h, --help           Prints help information
     -O, --remote-name    output to a file using the same name as the remote
     -V, --version        Prints version information
+    -v, --verbose        enable verbose logging (useful for debugging)
 
 OPTIONS:
     -o, --output <OUTPUT>            output filename
