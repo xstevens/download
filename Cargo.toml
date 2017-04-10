@@ -6,3 +6,4 @@ authors = ["Xavier Stevens <xavier.stevens@gmail.com>"]
 [dependencies]
 clap = "*"
 reqwest = "*"
+pbr = "*"
