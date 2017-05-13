@@ -1,9 +1,13 @@
 #[macro_use]
 extern crate clap;
-extern crate reqwest;
 extern crate pbr;
+extern crate crypto;
+extern crate reqwest;
 
 use clap::{Arg, App};
+use crypto::digest::Digest;
+use crypto::sha1::Sha1;
+use crypto::sha2::Sha256;
 use pbr::{ProgressBar, Units};
 use reqwest::header::UserAgent;
 use reqwest::header::ContentLength;
@@ -14,7 +18,6 @@ use std::io::prelude::*;
 use std::path::Path;
 use std::process;
 
-
 static DEFAULT_USER_AGENT: &'static str = concat!(env!("CARGO_PKG_NAME"),
                                                   "/",
                                                   env!("CARGO_PKG_VERSION"));
@@ -22,23 +25,39 @@ const EXIT_URL_FAILURE: i32 = 1;
 const EXIT_OUTPUT_FAILURE: i32 = 2;
 
 
+struct CopyResult {
+    bytes_written: u64,
+    sha1: String,
+    sha256: String,
+}
+
 fn get_filename(url: &str) -> Option<&str> {
     url.rsplit('/').next()
 }
 
-fn copy_with_pb<R: ?Sized, W: ?Sized>(reader: &mut R, writer: &mut W, progress: &mut ProgressBar<io::Stdout>) -> io::Result<u64>
+fn copy_with_progress<R: ?Sized, W: ?Sized>(reader: &mut R, writer: &mut W, progress: &mut ProgressBar<io::Stdout>) -> io::Result<CopyResult>
     where R: Read, W: Write
 {
     let mut buf = [0; 8192];
     let mut written = 0;
+    let mut sha1 = Sha1::new();
+    let mut sha256 = Sha256::new();
     loop {
         let len = match reader.read(&mut buf) {
-            Ok(0) => return Ok(written),
+            Ok(0) => {
+                return Ok(CopyResult {
+                    bytes_written: written,
+                    sha1: sha1.result_str(),
+                    sha256: sha256.result_str()
+                })
+            },
             Ok(len) => len,
             Err(ref e) if e.kind() == io::ErrorKind::Interrupted => continue,
             Err(e) => return Err(e),
         };
         writer.write_all(&buf[..len])?;
+        sha1.input(&buf[..len]);
+        sha256.input(&buf[..len]);
         progress.add(len as u64);
         written += len as u64;
     }
@@ -113,8 +132,10 @@ fn main() {
 
                 // copy file with progress updates
                 let mut writer = BufWriter::new(output_file);
-                copy_with_pb(&mut res, &mut writer, &mut pb)?;
+                let copy_result = copy_with_progress(&mut res, &mut writer, &mut pb)?;
                 writer.flush()?;
+                println!("sha1({}) = {}", fname, copy_result.sha1);
+                println!("sha256({}) = {}", fname, copy_result.sha256);
                 pb.finish_print("done.");
 
                 Ok(())

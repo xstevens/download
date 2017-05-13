@@ -4,6 +4,7 @@ version = "0.1.0"
 authors = ["Xavier Stevens <xavier.stevens@gmail.com>"]
 
 [dependencies]
-clap = "*"
-reqwest = "*"
-pbr = "*"
+clap = "2.24.1"
+pbr = "1.0.0"
+reqwest = "0.6.0"
+rust-crypto = "0.2.36"
