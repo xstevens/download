@@ -34,6 +34,14 @@ fn get_filename(url: &str) -> Option<&str> {
     url.rsplit('/').next()
 }
 
+fn write_status(writer: &mut Write, res: &reqwest::Response) {
+    let _ = writeln!(writer, "{} {}", res.version(), res.status());
+}
+
+fn write_headers(writer: &mut Write, res: &reqwest::Response) {
+    let _ = writeln!(writer, "{}", res.headers());
+}
+
 fn copy_with_progress<R: ?Sized, W: ?Sized>(reader: &mut R,
                                             writer: &mut W,
                                             progress: &mut ProgressBar<io::Stdout>)
@@ -58,9 +66,14 @@ fn copy_with_progress<R: ?Sized, W: ?Sized>(reader: &mut R,
             Err(ref e) if e.kind() == io::ErrorKind::Interrupted => continue,
             Err(e) => return Err(e),
         };
+        // write buf to writer
         writer.write_all(&buf[..len])?;
+
+        // add buf to hash digests
         sha1.input(&buf[..len]);
         sha256.input(&buf[..len]);
+
+        // increment progress and bytes written
         progress.add(len as u64);
         written += len as u64;
     }
@@ -112,7 +125,7 @@ fn main() {
         .header(UserAgent(user_agent.to_owned()))
         .send()
         .unwrap_or_else(|e| {
-                            let _ = writeln!(&mut std::io::stderr(), "{}", e);
+                            let _ = writeln!(&mut io::stderr(), "{}", e);
                             process::exit(EXIT_URL_FAILURE);
                         });
 
@@ -128,8 +141,11 @@ fn main() {
     if let Some(fname) = output_filename {
         let _ = File::create(Path::new(fname))
             .and_then(|output_file| {
+                let mut writer = BufWriter::new(output_file);
+
                 if verbose_enabled {
-                    println!("Headers: \n{}", res.headers());
+                    write_status(&mut io::stdout(), &res);
+                    write_headers(&mut io::stdout(), &res);
                 }
 
                 // setup progress bar based on content-length
@@ -144,7 +160,6 @@ fn main() {
                 pb.set_units(Units::Bytes);
 
                 // copy file with progress updates
-                let mut writer = BufWriter::new(output_file);
                 let copy_result = copy_with_progress(&mut res, &mut writer, &mut pb)?;
                 writer.flush()?;
 
@@ -157,12 +172,21 @@ fn main() {
                 Ok(())
             })
             .map_err(|e| {
-                         let _ = writeln!(&mut std::io::stderr(), "{}", e);
+                         let _ = writeln!(&mut io::stderr(), "{}", e);
                          process::exit(EXIT_OUTPUT_FAILURE);
                      });
     } else {
-        io::copy(&mut res, &mut io::stdout()).unwrap_or_else(|e| {
-            let _ = writeln!(&mut std::io::stderr(), "{}", e);
+        let stdout = io::stdout();
+        let lock = stdout.lock();
+        let mut writer = BufWriter::new(lock);
+        
+        if verbose_enabled {
+            write_status(&mut writer, &res);
+            write_headers(&mut writer, &res);
+        }
+
+        io::copy(&mut res, &mut writer).unwrap_or_else(|e| {
+            let _ = writeln!(&mut io::stderr(), "{}", e);
             process::exit(EXIT_OUTPUT_FAILURE);
         });
     }
