@@ -1,6 +1,6 @@
 [package]
 name = "download"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["Xavier Stevens <xavier.stevens@gmail.com>"]
 
 [dependencies]
