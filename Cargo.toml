@@ -6,7 +6,7 @@ authors = ["Xavier Stevens <xavier.stevens@gmail.com>"]
 [dependencies]
 clap = "2"
 pbr = "1.0.0"
-reqwest = "0.6"
+reqwest = "0.7"
 rust-crypto = "0.2"
 
 [profile.release]

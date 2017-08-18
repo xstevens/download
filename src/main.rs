@@ -34,11 +34,26 @@ fn get_filename(url: &str) -> Option<&str> {
 }
 
 fn write_status(writer: &mut Write, resp: &reqwest::Response) {
-    let _ = writeln!(writer, "{} {}", resp.version(), resp.status());
+    // TODO: get version back in reqwest 0.7... maybe can be cast to hyper type
+    let _ = writeln!(writer, "{}", resp.status());
 }
 
 fn write_headers(writer: &mut Write, resp: &reqwest::Response) {
     let _ = writeln!(writer, "{}", resp.headers());
+}
+
+fn http_download(url: &str, user_agent: &str, max_redirects: usize) -> reqwest::Result<reqwest::Response> {
+    let client = reqwest::Client::builder()?
+        .gzip(true)
+        .redirect(reqwest::RedirectPolicy::limited(max_redirects))
+        .build()?;
+
+    let resp = client
+        .get(url)?
+        .header(UserAgent::new(user_agent.to_owned()))
+        .send()?;
+
+    Ok(resp)
 }
 
 fn copy_with_progress<R: ?Sized, W: ?Sized>(
@@ -122,15 +137,18 @@ fn main() {
         .get_matches();
 
     let url = args.value_of("url").unwrap();
-    let user_agent = args.value_of("user-agent").unwrap_or(DEFAULT_USER_AGENT);
-    let max_redirects = args.value_of("max-redirects").unwrap_or_default().parse::<usize>().unwrap();
+    let user_agent = args.value_of("user-agent")
+        .unwrap_or(DEFAULT_USER_AGENT);
+    let max_redirects = args.value_of("max-redirects")
+        .unwrap_or_default()
+        .parse::<usize>()
+        .unwrap();
     let verbose = args.is_present("verbose");
 
     // determine an output filename; if none are set then send to stdout
     let output_path = {
         if args.is_present("remote-name") {
-            get_filename(url)
-                .and_then(|filename| Some(Path::new(filename)))
+            get_filename(url).and_then(|filename| Some(Path::new(filename)))
         } else {
             args.value_of("output")
                 .and_then(|path| Some(Path::new(path)))
@@ -138,16 +156,10 @@ fn main() {
     };
 
     // setup client for downloading and send request
-    let mut client = reqwest::Client::new().unwrap();
-    client.gzip(true);
-    client.redirect(reqwest::RedirectPolicy::limited(max_redirects));
-    let mut resp = client.get(url)
-        .header(UserAgent(user_agent.to_owned()))
-        .send()
-        .unwrap_or_else(|e| {
-            let _ = writeln!(&mut io::stderr(), "{}", e);
-            process::exit(EXIT_URL_FAILURE);
-        });
+    let mut resp = http_download(url, user_agent, max_redirects).unwrap_or_else(|e| {
+        let _ = writeln!(&mut io::stderr(), "{}", e);
+        process::exit(EXIT_URL_FAILURE);
+    });
 
     // process response
     if let Some(file_path) = output_path {
