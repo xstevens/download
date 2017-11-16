@@ -43,13 +43,13 @@ fn write_headers(writer: &mut Write, resp: &reqwest::Response) {
 }
 
 fn http_download(url: &str, user_agent: &str, max_redirects: usize) -> reqwest::Result<reqwest::Response> {
-    let client = reqwest::Client::builder()?
+    let client = reqwest::Client::builder()
         .gzip(true)
         .redirect(reqwest::RedirectPolicy::limited(max_redirects))
         .build()?;
 
     let resp = client
-        .get(url)?
+        .get(url)
         .header(UserAgent::new(user_agent.to_owned()))
         .send()?;
 
