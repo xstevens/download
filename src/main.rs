@@ -23,7 +23,7 @@ static DEFAULT_USER_AGENT: &'static str =
 const EXIT_URL_FAILURE: i32 = 1;
 const EXIT_OUTPUT_FAILURE: i32 = 2;
 
-struct CopyResult {
+struct DownloadResult {
     bytes_written: u64,
     sha1: String,
     sha256: String,
@@ -56,11 +56,11 @@ fn http_download(url: &str, user_agent: &str, max_redirects: usize) -> reqwest::
     Ok(resp)
 }
 
-fn copy_with_progress<R: ?Sized, W: ?Sized>(
+fn download_with_progress<R: ?Sized, W: ?Sized>(
     reader: &mut R,
     writer: &mut W,
     progress: &mut ProgressBar<io::Stdout>,
-) -> io::Result<CopyResult>
+) -> io::Result<DownloadResult>
 where
     R: Read,
     W: Write,
@@ -72,7 +72,7 @@ where
     loop {
         let len = match reader.read(&mut buf) {
             Ok(0) => {
-                return Ok(CopyResult {
+                return Ok(DownloadResult {
                     bytes_written: written,
                     sha1: sha1.result_str(),
                     sha256: sha256.result_str(),
@@ -184,12 +184,12 @@ fn main() {
                 pb.set_units(Units::Bytes);
 
                 // copy file with progress updates
-                let copy_result = copy_with_progress(&mut resp, &mut writer, &mut pb)?;
+                let result = download_with_progress(&mut resp, &mut writer, &mut pb)?;
                 writer.flush()?;
 
                 // print hash signatures
-                println!("sha1({}) = {}", file_path.display(), copy_result.sha1);
-                println!("sha256({}) = {}", file_path.display(), copy_result.sha256);
+                println!("sha1({}) = {}", file_path.display(), result.sha1);
+                println!("sha256({}) = {}", file_path.display(), result.sha256);
 
                 pb.finish_print("Done.");
 
