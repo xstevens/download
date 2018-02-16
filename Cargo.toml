@@ -5,9 +5,10 @@ authors = ["Xavier Stevens <xavier.stevens@gmail.com>"]
 
 [dependencies]
 clap = "2"
+data-encoding = "2.1.1"
 pbr = "1.0.0"
 reqwest = "0.8"
-rust-crypto = "0.2"
+ring = "0.12.1"
 
 [profile.release]
 lto = true

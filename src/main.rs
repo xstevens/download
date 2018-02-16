@@ -1,16 +1,16 @@
 #[macro_use]
 extern crate clap;
 extern crate pbr;
-extern crate crypto;
+extern crate data_encoding;
 extern crate reqwest;
+extern crate ring;
 
 use clap::{App, Arg};
-use crypto::digest::Digest;
-use crypto::sha1::Sha1;
-use crypto::sha2::Sha256;
+use data_encoding::HEXLOWER;
 use pbr::{ProgressBar, Units};
 use reqwest::header::UserAgent;
 use reqwest::header::ContentLength;
+use ring::digest::{Context, Digest, SHA1, SHA256};
 use std::fs::File;
 use std::io;
 use std::io::BufWriter;
@@ -25,8 +25,8 @@ const EXIT_OUTPUT_FAILURE: i32 = 2;
 
 struct DownloadResult {
     bytes_written: u64,
-    sha1: String,
-    sha256: String,
+    sha1: Digest,
+    sha256: Digest,
 }
 
 fn get_filename(url: &str) -> Option<&str> {
@@ -67,15 +67,15 @@ where
 {
     let mut buf = [0; 8192];
     let mut written = 0;
-    let mut sha1 = Sha1::new();
-    let mut sha256 = Sha256::new();
+    let mut sha1_ctx = Context::new(&SHA1);
+    let mut sha256_ctx = Context::new(&SHA256);
     loop {
         let len = match reader.read(&mut buf) {
             Ok(0) => {
                 return Ok(DownloadResult {
                     bytes_written: written,
-                    sha1: sha1.result_str(),
-                    sha256: sha256.result_str(),
+                    sha1: sha1_ctx.finish(),
+                    sha256: sha256_ctx.finish(),
                 })
             }
             Ok(len) => len,
@@ -86,8 +86,8 @@ where
         writer.write_all(&buf[..len])?;
 
         // add buf to hash digests
-        sha1.input(&buf[..len]);
-        sha256.input(&buf[..len]);
+        sha1_ctx.update(&buf[..len]);
+        sha256_ctx.update(&buf[..len]);
 
         // increment progress and bytes written
         progress.add(len as u64);
@@ -188,8 +188,8 @@ fn main() {
                 writer.flush()?;
 
                 // print hash signatures
-                println!("sha1({}) = {}", file_path.display(), result.sha1);
-                println!("sha256({}) = {}", file_path.display(), result.sha256);
+                println!("sha1({}) = {}", file_path.display(), HEXLOWER.encode(result.sha1.as_ref()));
+                println!("sha256({}) = {}", file_path.display(), HEXLOWER.encode(result.sha256.as_ref()));
 
                 pb.finish_print("Done.");
 
