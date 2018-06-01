@@ -1,14 +1,14 @@
 [package]
 name = "download"
-version = "0.1.3"
+version = "0.1.4"
 authors = ["Xavier Stevens <xavier.stevens@gmail.com>"]
 
 [dependencies]
 clap = "2"
-data-encoding = "2.1.1"
-pbr = "1.0.0"
+data-encoding = "2.1"
+pbr = "1.0"
 reqwest = "0.8"
-ring = "0.12.1"
+ring = "0.12"
 
 [profile.release]
 lto = true
