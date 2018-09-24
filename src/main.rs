@@ -1,15 +1,17 @@
 #[macro_use]
 extern crate clap;
-extern crate pbr;
 extern crate data_encoding;
+extern crate hyper;
+extern crate pbr;
 extern crate reqwest;
 extern crate ring;
 
 use clap::{App, Arg};
 use data_encoding::HEXLOWER;
 use pbr::{ProgressBar, Units};
-use reqwest::header::UserAgent;
-use reqwest::header::ContentLength;
+
+use reqwest::header;
+use hyper::Uri;
 use ring::digest::{Context, Digest, SHA1, SHA256};
 use std::fs::File;
 use std::io;
@@ -18,8 +20,7 @@ use std::io::prelude::*;
 use std::path::Path;
 use std::process;
 
-static DEFAULT_USER_AGENT: &'static str =
-    concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
+static DEFAULT_USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
 const EXIT_URL_FAILURE: i32 = 1;
 const EXIT_OUTPUT_FAILURE: i32 = 2;
 
@@ -39,18 +40,25 @@ fn write_status(writer: &mut Write, resp: &reqwest::Response) {
 }
 
 fn write_headers(writer: &mut Write, resp: &reqwest::Response) {
-    let _ = writeln!(writer, "{}", resp.headers());
+    for (key, value) in resp.headers().iter() {
+        writeln!(writer, "{}: {}", key, value.to_str().unwrap_or(""));
+    }
 }
 
-fn http_download(url: &str, user_agent: &str, max_redirects: usize) -> reqwest::Result<reqwest::Response> {
+fn http_download(
+    url: &str,
+    user_agent: &str,
+    max_redirects: usize,
+) -> reqwest::Result<reqwest::Response> {
     let client = reqwest::Client::builder()
         .gzip(true)
         .redirect(reqwest::RedirectPolicy::limited(max_redirects))
         .build()?;
 
+    let ua_header = header::HeaderValue::from_str(user_agent).unwrap();
     let resp = client
         .get(url)
-        .header(UserAgent::new(user_agent.to_owned()))
+        .header(header::USER_AGENT, ua_header)
         .send()?;
 
     Ok(resp)
@@ -137,8 +145,7 @@ fn main() {
         .get_matches();
 
     let url = args.value_of("url").unwrap();
-    let user_agent = args.value_of("user-agent")
-        .unwrap_or(DEFAULT_USER_AGENT);
+    let user_agent = args.value_of("user-agent").unwrap_or(DEFAULT_USER_AGENT);
     let max_redirects = args.value_of("max-redirects")
         .unwrap_or_default()
         .parse::<usize>()
@@ -146,9 +153,11 @@ fn main() {
     let verbose = args.is_present("verbose");
 
     // determine an output filename; if none are set then send to stdout
+    let uri = url.parse::<Uri>().unwrap();
     let output_path = {
         if args.is_present("remote-name") {
-            get_filename(url).and_then(|filename| Some(Path::new(filename)))
+            get_filename(uri.path())
+                .and_then(|filename| Some(Path::new(filename)))
         } else {
             args.value_of("output")
                 .and_then(|path| Some(Path::new(path)))
@@ -173,13 +182,11 @@ fn main() {
                 }
 
                 // setup progress bar based on content-length
-                let mut n_bytes: u64 = 0;
-                match resp.headers().get::<ContentLength>() {
-                    Some(length) => {
-                        n_bytes = length.0 as u64;
-                    }
-                    None => println!("Content-Length header missing"),
-                }
+                let n_bytes: u64 = resp.headers()
+                    .get(header::CONTENT_LENGTH)
+                    .and_then(|content_len| content_len.to_str().ok())
+                    .and_then(|content_len| content_len.parse().ok())
+                    .unwrap_or(0);
                 let mut pb = ProgressBar::new(n_bytes);
                 pb.set_units(Units::Bytes);
 
@@ -187,9 +194,17 @@ fn main() {
                 let result = download_with_progress(&mut resp, &mut writer, &mut pb)?;
                 writer.flush()?;
 
-                // print hash signatures
-                println!("sha1({}) = {}", file_path.display(), HEXLOWER.encode(result.sha1.as_ref()));
-                println!("sha256({}) = {}", file_path.display(), HEXLOWER.encode(result.sha256.as_ref()));
+                // print hash digests
+                println!(
+                    "sha1({}) = {}",
+                    file_path.display(),
+                    HEXLOWER.encode(result.sha1.as_ref())
+                );
+                println!(
+                    "sha256({}) = {}",
+                    file_path.display(),
+                    HEXLOWER.encode(result.sha256.as_ref())
+                );
 
                 pb.finish_print("Done.");
 
