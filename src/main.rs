@@ -4,7 +4,9 @@ extern crate data_encoding;
 extern crate hyper;
 extern crate pbr;
 extern crate reqwest;
-extern crate ring;
+extern crate digest;
+extern crate sha2;
+extern crate sha1;
 
 use clap::{App, Arg};
 use data_encoding::HEXLOWER;
@@ -12,7 +14,9 @@ use pbr::{ProgressBar, Units};
 
 use reqwest::header;
 use hyper::Uri;
-use ring::digest::{Context, Digest, SHA1, SHA256};
+use digest::Digest;
+use sha1::Sha1;
+use sha2::Sha256;
 use std::fs::File;
 use std::io;
 use std::io::BufWriter;
@@ -26,8 +30,8 @@ const EXIT_OUTPUT_FAILURE: i32 = 2;
 
 struct DownloadResult {
     bytes_written: u64,
-    sha1: Digest,
-    sha256: Digest,
+    sha1: String,
+    sha256: String,
 }
 
 fn get_filename(url: &str) -> Option<&str> {
@@ -35,13 +39,12 @@ fn get_filename(url: &str) -> Option<&str> {
 }
 
 fn write_status(writer: &mut Write, resp: &reqwest::Response) {
-    // TODO: get version back in reqwest 0.7... maybe can be cast to hyper type
-    let _ = writeln!(writer, "{}", resp.status());
+    let _ = writeln!(writer, "{:?} {}", resp.version(), resp.status());
 }
 
 fn write_headers(writer: &mut Write, resp: &reqwest::Response) {
     for (key, value) in resp.headers().iter() {
-        writeln!(writer, "{}: {}", key, value.to_str().unwrap_or(""));
+        let _ = writeln!(writer, "{}: {}", key, value.to_str().unwrap_or(""));
     }
 }
 
@@ -64,7 +67,7 @@ fn http_download(
     Ok(resp)
 }
 
-fn download_with_progress<R: ?Sized, W: ?Sized>(
+fn download_with_progress<'a, R: ?Sized, W: ?Sized>(
     reader: &mut R,
     writer: &mut W,
     progress: &mut ProgressBar<io::Stdout>,
@@ -75,15 +78,15 @@ where
 {
     let mut buf = [0; 8192];
     let mut written = 0;
-    let mut sha1_ctx = Context::new(&SHA1);
-    let mut sha256_ctx = Context::new(&SHA256);
+    let mut sha1_hasher = Sha1::new();
+    let mut sha256_hasher = Sha256::new();
     loop {
         let len = match reader.read(&mut buf) {
             Ok(0) => {
                 return Ok(DownloadResult {
                     bytes_written: written,
-                    sha1: sha1_ctx.finish(),
-                    sha256: sha256_ctx.finish(),
+                    sha1: HEXLOWER.encode(sha1_hasher.result().as_slice()),
+                    sha256: HEXLOWER.encode(sha256_hasher.result().as_slice()),
                 })
             }
             Ok(len) => len,
@@ -94,8 +97,8 @@ where
         writer.write_all(&buf[..len])?;
 
         // add buf to hash digests
-        sha1_ctx.update(&buf[..len]);
-        sha256_ctx.update(&buf[..len]);
+        sha1_hasher.input(&buf[..len]);
+        sha256_hasher.input(&buf[..len]);
 
         // increment progress and bytes written
         progress.add(len as u64);
@@ -198,12 +201,12 @@ fn main() {
                 println!(
                     "sha1({}) = {}",
                     file_path.display(),
-                    HEXLOWER.encode(result.sha1.as_ref())
+                    result.sha1
                 );
                 println!(
                     "sha256({}) = {}",
                     file_path.display(),
-                    HEXLOWER.encode(result.sha256.as_ref())
+                    result.sha256,
                 );
 
                 pb.finish_print("Done.");
