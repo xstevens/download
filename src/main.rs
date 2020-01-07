@@ -38,11 +38,11 @@ fn get_filename(url: &str) -> Option<&str> {
     url.rsplit('/').next()
 }
 
-fn write_status(writer: &mut Write, resp: &reqwest::Response) {
+fn write_status(writer: &mut Write, resp: &reqwest::blocking::Response) {
     let _ = writeln!(writer, "{:?} {}", resp.version(), resp.status());
 }
 
-fn write_headers(writer: &mut Write, resp: &reqwest::Response) {
+fn write_headers(writer: &mut Write, resp: &reqwest::blocking::Response) {
     for (key, value) in resp.headers().iter() {
         let _ = writeln!(writer, "{}: {}", key, value.to_str().unwrap_or(""));
     }
@@ -52,10 +52,9 @@ fn http_download(
     url: &str,
     user_agent: &str,
     max_redirects: usize,
-) -> reqwest::Result<reqwest::Response> {
-    let client = reqwest::Client::builder()
-        .gzip(true)
-        .redirect(reqwest::RedirectPolicy::limited(max_redirects))
+) -> reqwest::Result<reqwest::blocking::Response> {
+    let client = reqwest::blocking::Client::builder()
+        .redirect(reqwest::redirect::Policy::limited(max_redirects))
         .build()?;
 
     let ua_header = header::HeaderValue::from_str(user_agent).unwrap();

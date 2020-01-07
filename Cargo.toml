@@ -1,13 +1,13 @@
 [package]
 name = "download"
-version = "0.1.6"
+version = "0.1.7"
 authors = ["Xavier Stevens"]
 
 [dependencies]
-clap = "2"
+clap = "2.33.0"
 data-encoding = "2.1"
-pbr = "1"
-reqwest = "0.9"
+pbr = "1.0.2"
+reqwest = { version = "0.10.0", default-features = false, features = ["blocking", "rustls-tls"] }
 hyper = "0.12"
 digest = "0.8"
 sha2 = "0.8"
