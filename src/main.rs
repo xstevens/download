@@ -38,11 +38,11 @@ fn get_filename(url: &str) -> Option<&str> {
     url.rsplit('/').next()
 }
 
-fn write_status(writer: &mut Write, resp: &reqwest::blocking::Response) {
+fn write_status(writer: &mut dyn Write, resp: &reqwest::blocking::Response) {
     let _ = writeln!(writer, "{:?} {}", resp.version(), resp.status());
 }
 
-fn write_headers(writer: &mut Write, resp: &reqwest::blocking::Response) {
+fn write_headers(writer: &mut dyn Write, resp: &reqwest::blocking::Response) {
     for (key, value) in resp.headers().iter() {
         let _ = writeln!(writer, "{}: {}", key, value.to_str().unwrap_or(""));
     }
@@ -84,8 +84,8 @@ where
             Ok(0) => {
                 return Ok(DownloadResult {
                     bytes_written: written,
-                    sha1: HEXLOWER.encode(sha1_hasher.result().as_slice()),
-                    sha256: HEXLOWER.encode(sha256_hasher.result().as_slice()),
+                    sha1: HEXLOWER.encode(sha1_hasher.finalize().as_slice()),
+                    sha256: HEXLOWER.encode(sha256_hasher.finalize().as_slice()),
                 })
             }
             Ok(len) => len,
@@ -96,8 +96,8 @@ where
         writer.write_all(&buf[..len])?;
 
         // add buf to hash digests
-        sha1_hasher.input(&buf[..len]);
-        sha256_hasher.input(&buf[..len]);
+        sha1_hasher.update(&buf[..len]);
+        sha256_hasher.update(&buf[..len]);
 
         // increment progress and bytes written
         progress.add(len as u64);

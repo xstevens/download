@@ -1,17 +1,17 @@
 [package]
 name = "download"
-version = "0.1.7"
+version = "0.1.8"
 authors = ["Xavier Stevens"]
 
 [dependencies]
-clap = "2.33.0"
-data-encoding = "2.1"
-pbr = "1.0.2"
-reqwest = { version = "0.10.0", default-features = false, features = ["blocking", "rustls-tls"] }
-hyper = "0.12"
-digest = "0.8"
-sha2 = "0.8"
-sha-1 = "0.8"
+clap = "2.33"
+data-encoding = "2.3"
+pbr = "1.0"
+reqwest = { version = "0.11.0", default-features = false, features = ["blocking", "rustls-tls"] }
+hyper = "0.14"
+digest = "0.9"
+sha2 = "0.9"
+sha-1 = "0.9"
 
 [profile.release]
 lto = true
