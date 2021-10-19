@@ -66,7 +66,7 @@ fn http_download(
     Ok(resp)
 }
 
-fn download_with_progress<'a, R: ?Sized, W: ?Sized>(
+fn download_with_progress<R: ?Sized, W: ?Sized>(
     reader: &mut R,
     writer: &mut W,
     progress: &mut ProgressBar<io::Stdout>,
@@ -159,10 +159,10 @@ fn main() {
     let output_path = {
         if args.is_present("remote-name") {
             get_filename(uri.path())
-                .and_then(|filename| Some(Path::new(filename)))
+                .map(|filename| Path::new(filename))
         } else {
             args.value_of("output")
-                .and_then(|path| Some(Path::new(path)))
+                .map(|path| Path::new(path))
         }
     };
 
@@ -231,6 +231,4 @@ fn main() {
             process::exit(EXIT_OUTPUT_FAILURE);
         });
     }
-
-    ()
 }
