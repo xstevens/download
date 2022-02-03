@@ -13,6 +13,7 @@ use data_encoding::HEXLOWER;
 use pbr::{ProgressBar, Units};
 
 use reqwest::header;
+use reqwest::tls;
 use hyper::Uri;
 use digest::Digest;
 use sha1::Sha1;
@@ -55,6 +56,7 @@ fn http_download(
 ) -> reqwest::Result<reqwest::blocking::Response> {
     let client = reqwest::blocking::Client::builder()
         .redirect(reqwest::redirect::Policy::limited(max_redirects))
+        .min_tls_version(tls::Version::TLS_1_2)
         .build()?;
 
     let ua_header = header::HeaderValue::from_str(user_agent).unwrap();
