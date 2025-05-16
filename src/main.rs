@@ -1,21 +1,19 @@
-#[macro_use]
 extern crate clap;
 extern crate data_encoding;
+extern crate digest;
 extern crate hyper;
 extern crate pbr;
 extern crate reqwest;
-extern crate digest;
-extern crate sha2;
 extern crate sha1;
+extern crate sha2;
 
-use clap::{App, Arg};
+use clap::Parser;
 use data_encoding::HEXLOWER;
 use pbr::{ProgressBar, Units};
 
+use digest::Digest;
 use reqwest::header;
 use reqwest::tls;
-use hyper::Uri;
-use digest::Digest;
 use sha1::Sha1;
 use sha2::Sha256;
 use std::fs::File;
@@ -28,6 +26,33 @@ use std::process;
 static DEFAULT_USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
 const EXIT_URL_FAILURE: i32 = 1;
 const EXIT_OUTPUT_FAILURE: i32 = 2;
+
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None, arg_required_else_help(true))]
+struct Cli {
+    /// Output to file path
+    #[clap(short, long, value_name = "FILE")]
+    output: Option<String>,
+
+    /// Output to a file using the same name as the remote
+    #[clap(short('O'), long)]
+    remote_name: bool,
+
+    /// Use value as User-Agent header
+    #[clap(short('A'), long, default_value = DEFAULT_USER_AGENT)]
+    user_agent: String,
+
+    /// Maximum number of redirects to follow
+    #[clap(long, default_value = "0")]
+    max_redirects: usize,
+
+    /// Enable verbose logging
+    #[clap(short, long)]
+    verbose: bool,
+
+    #[arg(required(true))]
+    url: reqwest::Url,
+}
 
 struct DownloadResult {
     bytes_written: u64,
@@ -50,13 +75,16 @@ fn write_headers(writer: &mut dyn Write, resp: &reqwest::blocking::Response) {
 }
 
 fn http_download(
-    url: &str,
+    url: reqwest::Url,
     user_agent: &str,
     max_redirects: usize,
 ) -> reqwest::Result<reqwest::blocking::Response> {
     let client = reqwest::blocking::Client::builder()
         .redirect(reqwest::redirect::Policy::limited(max_redirects))
         .min_tls_version(tls::Version::TLS_1_2)
+        .connect_timeout(std::time::Duration::from_secs(5))
+        .use_rustls_tls()
+        .https_only(true)
         .build()?;
 
     let ua_header = header::HeaderValue::from_str(user_agent).unwrap();
@@ -88,7 +116,7 @@ where
                     bytes_written: written,
                     sha1: HEXLOWER.encode(sha1_hasher.finalize().as_slice()),
                     sha256: HEXLOWER.encode(sha256_hasher.finalize().as_slice()),
-                })
+                });
             }
             Ok(len) => len,
             Err(ref e) if e.kind() == io::ErrorKind::Interrupted => continue,
@@ -108,71 +136,26 @@ where
 }
 
 fn main() {
-    let args = App::new("download")
-        .version(crate_version!())
-        .about("remote file downloader command-line interface")
-        .arg(
-            Arg::with_name("output")
-                .short("o")
-                .long("output")
-                .value_name("OUTPUT")
-                .help("output filename")
-                .takes_value(true),
-        )
-        .arg(
-            Arg::with_name("remote-name")
-                .short("O")
-                .long("remote-name")
-                .help("output to a file using the same name as the remote"),
-        )
-        .arg(
-            Arg::with_name("user-agent")
-                .short("A")
-                .long("user-agent")
-                .takes_value(true)
-                .help("use value as user-agent header"),
-        )
-        .arg(
-            Arg::with_name("max-redirects")
-                .long("max-redirects")
-                .takes_value(true)
-                .default_value("0")
-                .help("maximum number of redirects to follow"),
-        )
-        .arg(
-            Arg::with_name("verbose")
-                .short("v")
-                .long("verbose")
-                .help("enable verbose logging (useful for debugging)"),
-        )
-        .arg(Arg::with_name("url").required(true))
-        .get_matches();
-
-    let url = args.value_of("url").unwrap();
-    let user_agent = args.value_of("user-agent").unwrap_or(DEFAULT_USER_AGENT);
-    let max_redirects = args.value_of("max-redirects")
-        .unwrap_or_default()
-        .parse::<usize>()
-        .unwrap();
-    let verbose = args.is_present("verbose");
+    // parse CLI args
+    let cli = Cli::parse();
 
     // determine an output filename; if none are set then send to stdout
-    let uri = url.parse::<Uri>().unwrap();
+    // TODO: this feels janky to have to clone and long-live store this to avoid borrow-checker annoyances below
+    let llpath = cli.output.clone().unwrap_or_default();
     let output_path = {
-        if args.is_present("remote-name") {
-            get_filename(uri.path())
-                .map(|filename| Path::new(filename))
+        if cli.remote_name {
+            get_filename(cli.url.path()).map(|filename| Path::new(filename))
         } else {
-            args.value_of("output")
-                .map(|path| Path::new(path))
+            cli.output.map(|_| Path::new(llpath.as_str()))
         }
     };
 
     // setup client for downloading and send request
-    let mut resp = http_download(url, user_agent, max_redirects).unwrap_or_else(|e| {
-        let _ = writeln!(&mut io::stderr(), "{}", e);
-        process::exit(EXIT_URL_FAILURE);
-    });
+    let mut resp = http_download(cli.url.clone(), cli.user_agent.as_str(), cli.max_redirects)
+        .unwrap_or_else(|e| {
+            let _ = writeln!(&mut io::stderr(), "{}", e);
+            process::exit(EXIT_URL_FAILURE);
+        });
 
     // process response
     if let Some(file_path) = output_path {
@@ -180,13 +163,14 @@ fn main() {
             .and_then(|output_file| {
                 let mut writer = BufWriter::new(output_file);
 
-                if verbose {
+                if cli.verbose {
                     write_status(&mut io::stdout(), &resp);
                     write_headers(&mut io::stdout(), &resp);
                 }
 
                 // setup progress bar based on content-length
-                let n_bytes: u64 = resp.headers()
+                let n_bytes: u64 = resp
+                    .headers()
                     .get(header::CONTENT_LENGTH)
                     .and_then(|content_len| content_len.to_str().ok())
                     .and_then(|content_len| content_len.parse().ok())
@@ -199,16 +183,8 @@ fn main() {
                 writer.flush()?;
 
                 // print hash digests
-                println!(
-                    "sha1({}) = {}",
-                    file_path.display(),
-                    result.sha1
-                );
-                println!(
-                    "sha256({}) = {}",
-                    file_path.display(),
-                    result.sha256,
-                );
+                println!("sha1({}) = {}", file_path.display(), result.sha1);
+                println!("sha256({}) = {}", file_path.display(), result.sha256,);
 
                 pb.finish_print("Done.");
 
@@ -223,7 +199,7 @@ fn main() {
         let lock = stdout.lock();
         let mut writer = BufWriter::new(lock);
 
-        if verbose {
+        if cli.verbose {
             write_status(&mut writer, &resp);
             write_headers(&mut writer, &resp);
         }

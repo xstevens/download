@@ -1,17 +1,22 @@
 [package]
 name = "download"
-version = "0.1.8"
+version = "0.2.0"
+edition = "2024"
 authors = ["Xavier Stevens"]
+license = "MIT"
 
 [dependencies]
-clap = "2.33"
-data-encoding = "2.3"
-pbr = "1.0"
-reqwest = { version = "0.11.0", default-features = false, features = ["blocking", "rustls-tls"] }
+clap = { version = "4.5", features = ["derive"] }
+data-encoding = "2.4"
+pbr = "1.1"
+reqwest = { version = "0.11", default-features = false, features = [
+    "blocking",
+    "rustls-tls",
+] }
 hyper = "0.14"
-digest = "0.9"
-sha2 = "0.9"
-sha-1 = "0.9"
+digest = "0.10"
+sha2 = "0.10"
+sha-1 = "0.10"
 
 [profile.release]
 lto = true
