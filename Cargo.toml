@@ -9,11 +9,11 @@ license = "MIT"
 clap = { version = "4.5", features = ["derive"] }
 data-encoding = "2.4"
 pbr = "1.1"
-reqwest = { version = "0.11", default-features = false, features = [
+reqwest = { version = "^0.12", default-features = false, features = [
     "blocking",
     "rustls-tls",
 ] }
-hyper = "0.14"
+hyper = "^1.6"
 digest = "0.10"
 sha2 = "0.10"
 sha-1 = "0.10"
