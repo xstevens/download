@@ -1,21 +1,17 @@
 extern crate clap;
 extern crate data_encoding;
-extern crate digest;
 extern crate hyper;
 extern crate pbr;
 extern crate reqwest;
-extern crate sha1;
 extern crate sha2;
 
 use clap::Parser;
 use data_encoding::HEXLOWER;
 use pbr::{ProgressBar, Units};
 
-use digest::Digest;
 use reqwest::header;
 use reqwest::tls;
-use sha1::Sha1;
-use sha2::Sha256;
+use sha2::{Sha256, Digest};
 use std::fs::File;
 use std::io;
 use std::io::BufWriter;
@@ -56,7 +52,6 @@ struct Cli {
 
 struct DownloadResult {
     bytes_written: u64,
-    sha1: String,
     sha256: String,
 }
 
@@ -107,14 +102,12 @@ where
 {
     let mut buf = [0; 8192];
     let mut written = 0;
-    let mut sha1_hasher = Sha1::new();
     let mut sha256_hasher = Sha256::new();
     loop {
         let len = match reader.read(&mut buf) {
             Ok(0) => {
                 return Ok(DownloadResult {
                     bytes_written: written,
-                    sha1: HEXLOWER.encode(sha1_hasher.finalize().as_slice()),
                     sha256: HEXLOWER.encode(sha256_hasher.finalize().as_slice()),
                 });
             }
@@ -126,7 +119,6 @@ where
         writer.write_all(&buf[..len])?;
 
         // add buf to hash digests
-        sha1_hasher.update(&buf[..len]);
         sha256_hasher.update(&buf[..len]);
 
         // increment progress and bytes written
@@ -183,7 +175,6 @@ fn main() {
                 writer.flush()?;
 
                 // print hash digests
-                println!("sha1({}) = {}", file_path.display(), result.sha1);
                 println!("sha256({}) = {}", file_path.display(), result.sha256,);
 
                 pb.finish_print("Done.");

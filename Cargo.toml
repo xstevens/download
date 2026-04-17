@@ -1,6 +1,6 @@
 [package]
 name = "download"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 authors = ["Xavier Stevens"]
 license = "MIT"
@@ -9,14 +9,9 @@ license = "MIT"
 clap = { version = "4.5", features = ["derive"] }
 data-encoding = "2.4"
 pbr = "1.1"
-reqwest = { version = "^0.12", default-features = false, features = [
-    "blocking",
-    "rustls-tls",
-] }
-hyper = "^1.6"
-digest = "0.10"
-sha2 = "0.10"
-sha-1 = "0.10"
+reqwest = { version = "0.13.2", features = ["blocking"] }
+hyper = "1.9.0"
+sha2 = "0.11"
 
 [profile.release]
 lto = true
